@@ -14,7 +14,7 @@ from .rating import get_average_ratings
 
 
 @csrf_exempt
-@require_http_methods(["POST"])
+@require_http_methods(["PUT"])
 def register(request):
 
         data = json.loads(request.body)
@@ -36,7 +36,7 @@ def register(request):
 
 @csrf_exempt
 @require_http_methods(["POST"])
-def login_view(request):
+def login(request):
 
         data = json.loads(request.body)
         username = data.get('username')
@@ -57,7 +57,7 @@ def login_view(request):
 @csrf_exempt
 @login_required
 @require_http_methods(["POST"]) # CHANGE
-def logout_view(request):
+def logout(request):
 
         logout(request)
         return JsonResponse({'message': 'User logged out successfully'})
@@ -65,16 +65,20 @@ def logout_view(request):
 
 @require_http_methods(["GET"])
 @login_required
-def list_posts(request):
+def all_posts(request):
 
     user = request.user
     user_rating_subquery = Rating.objects.filter(
         post=OuterRef('pk'), user=user
     ).values('rating')[:1]
 
-    posts = Post.objects.all()
+
+    """we can also store posts in cache to avoid db load"""
+
+    posts = Post.objects.all()              # in a better practice we shouldn't send any direct request to db in view
     posts_vs_user_rate = posts.annotate(user_rating=Subquery(user_rating_subquery))
     post_ids = posts.values_list('id', flat=True)
+
     overall_average_ratings = get_average_ratings(post_ids)
 
 
@@ -110,6 +114,9 @@ def rate_post(request, post_id):
 @require_http_methods(["GET"])
 def post_detail(request, post_id):
     post = get_object_or_404(Post, id=post_id)
+
+    """we can store user ratings in clickhouse"""
+
     user_rating = Rating.objects.filter(user=request.user, post=post).first()
     if user_rating is None:
         rate = -1
@@ -127,6 +134,11 @@ def post_detail(request, post_id):
 @login_required
 @require_http_methods(["POST"])
 def create_post(request):
+
+    """this function creates a new post, we can do this directly in admin panel,
+     it is just for making it more convenient, thus we don't assign user to posts
+    """
+
     data = json.loads(request.body)
     title = data.get('title')
     content = data.get('content')
